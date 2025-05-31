@@ -79,6 +79,18 @@
             color: #155724;
             font-weight: bold;
         }
+        /* Styles for point scoring visual feedback */
+        .score-possible {
+            background-color: #d4edda; /* Light green for potential score */
+            color: #155724;
+            font-weight: bold;
+        }
+        .no-score {
+            background-color: #f8d7da; /* Light red when no more score possible */
+            color: #721c24;
+            font-weight: bold;
+        }
+
         .controls {
             margin-top: 30px;
             padding: 20px;
@@ -88,7 +100,7 @@
             color: #333;
             margin-bottom: 15px;
         }
-        .player-management, .input-group {
+        .player-management, .input-group, .action-buttons {
             display: flex;
             justify-content: center;
             align-items: center;
@@ -104,7 +116,7 @@
             flex-grow: 1; /* Allow input to grow */
             max-width: 200px;
         }
-        .player-management button, .input-group button, .reset-button {
+        .player-management button, .action-buttons button, .history-controls button {
             background-color: #007bff;
             color: white;
             border: none;
@@ -114,11 +126,19 @@
             font-size: 1rem;
             transition: background-color 0.3s ease;
         }
-        .player-management button:hover, .reset-button:hover {
+        .player-management button:hover, .action-buttons button:hover, .history-controls button:hover {
             background-color: #0056b3;
         }
         .input-group button {
             background-color: #28a745;
+            color: white;
+            border: none;
+            padding: 12px 25px; /* Larger padding for "Tilføj Træffer" */
+            border-radius: 5px;
+            cursor: pointer;
+            font-size: 1.1rem; /* Larger font size */
+            font-weight: bold;
+            transition: background-color 0.3s ease;
         }
         .input-group button:hover {
             background-color: #218838;
@@ -144,6 +164,66 @@
             color: #28a745;
             font-size: 1.5rem;
             margin-top: 20px;
+        }
+        .reset-button {
+            background-color: #6c757d; /* A bit different color for reset */
+        }
+        .reset-button:hover {
+            background-color: #5a6268;
+        }
+        .undo-button {
+            background-color: #ffc107; /* Warning-like color for undo */
+            color: #333;
+        }
+        .undo-button:hover {
+            background-color: #e0a800;
+        }
+
+        /* Game History Styles */
+        .game-history-container {
+            margin-top: 40px;
+            border-top: 1px solid #eee;
+            padding-top: 30px;
+            text-align: left;
+        }
+        .game-history-container h3 {
+            text-align: center;
+            color: #333;
+            margin-bottom: 20px;
+        }
+        .game-history-item {
+            background-color: #f2f2f2;
+            border: 1px solid #e0e0e0;
+            border-radius: 6px;
+            padding: 15px;
+            margin-bottom: 15px;
+            box-shadow: 0 2px 5px rgba(0,0,0,0.05);
+        }
+        .game-history-item p {
+            margin: 5px 0;
+            font-size: 0.95rem;
+        }
+        .game-history-item strong {
+            color: #333;
+        }
+        .game-history-item ul {
+            list-style: none;
+            padding: 0;
+            margin: 5px 0 0 0;
+        }
+        .game-history-item ul li {
+            margin-bottom: 3px;
+            color: #555;
+        }
+        .history-controls {
+            text-align: center;
+            margin-top: 20px;
+        }
+        .history-controls button {
+            background-color: #dc3545; /* Red for clear history */
+        }
+        .history-controls button:hover {
+            background-color: #c82333;
         }
     </style>
 </head>
@@ -192,7 +272,21 @@
             </div>
             <p id="message" class="message"></p>
             <p id="winnerMessage" class="winner-message"></p>
-            <button class="reset-button" onclick="resetGame()">Nulstil Spil</button>
+            
+            <div class="action-buttons">
+                <button class="undo-button" onclick="undoLastHit()">Fortryd Sidste Kast</button>
+                <button class="reset-button" onclick="resetGame()">Nulstil Spil</button>
+            </div>
+        </div>
+
+        <div class="game-history-container">
+            <h3>Spil Historik</h3>
+            <div id="gameHistoryList">
+                <p>Ingen tidligere spil gemt.</p>
+            </div>
+            <div class="history-controls">
+                <button onclick="clearGameHistory()">Ryd Spil Historik</button>
+            </div>
         </div>
     </div>
 
@@ -200,23 +294,25 @@
         const fields = ['15', '16', '17', '18', '19', '20', 'Bull', 'Double', 'Triple'];
         const players = []; // This will now be dynamically populated and starts empty
 
+        let lastAction = null; // Stores info about the last hit for undo functionality
+        let gameEnded = false; // New flag to indicate if the game has truly ended based on new rules
+
+        // --- Game History Variables ---
+        const GAME_HISTORY_KEY = 'mickeyMouseDartHistory';
+        let gameHistory = [];
+
         // Initialize hits for each player and field
         function initializeGame() {
-            // No default players added here. User must add them.
-            // Reset existing players if any
-            players.forEach(player => {
-                fields.forEach(field => {
-                    player.hits[field] = 0;
-                });
-                player.score = 0;
-            });
-            updateScoreboard();
-            populatePlayerDropdown(); // Ensure dropdown is updated even if empty
+            players.length = 0; // Clear all players to start fresh
+            lastAction = null; // Clear undo history
+            gameEnded = false; // Reset game ended flag
             document.getElementById('message').textContent = '';
             document.getElementById('winnerMessage').textContent = '';
-            document.getElementById('currentPlayer').disabled = false;
-            document.getElementById('targetNumber').disabled = false;
-            document.getElementById('hitMultiplier').disabled = false;
+            
+            updateScoreboard(); // This will also handle disabling controls
+            populatePlayerDropdown(); // Ensure dropdown is updated even if empty
+
+            loadGameHistory(); // Load history when page loads
         }
 
         function addPlayer() {
@@ -254,14 +350,15 @@
                 defaultOption.disabled = true;
                 defaultOption.selected = true;
                 currentPlayerSelect.appendChild(defaultOption);
+            } else {
+                players.forEach((player, index) => {
+                    const option = document.createElement('option');
+                    option.value = index;
+                    option.textContent = player.name;
+                    currentPlayerSelect.appendChild(option);
+                });
+                currentPlayerSelect.value = players.length - 1; // Select the newly added player
             }
-
-            players.forEach((player, index) => {
-                const option = document.createElement('option');
-                option.value = index;
-                option.textContent = player.name;
-                currentPlayerSelect.appendChild(option);
-            });
         }
 
         function updateScoreboard() {
@@ -310,19 +407,37 @@
 
                     fieldCell.textContent = field;
                     hitsCell.textContent = player.hits[field];
-                    hitsCell.className = 'hits';
 
-                    if (player.hits[field] >= 3) {
-                        row.classList.add('closed');
+                    // Check if player has closed this field
+                    const isClosedByPlayer = player.hits[field] >= 3;
+
+                    // Check if *any* other player has NOT closed this field
+                    let otherPlayerHasNotClosed = false;
+                    if (isClosedByPlayer && players.length > 1) { // Only relevant if multiple players
+                        for (let i = 0; i < players.length; i++) {
+                            if (i !== playerIndex && players[i].hits[field] < 3) {
+                                otherPlayerHasNotClosed = true;
+                                break;
+                            }
+                        }
+                    }
+
+                    if (isClosedByPlayer && otherPlayerHasNotClosed) {
+                        row.classList.add('score-possible'); // Green for potential score
                         hitsCell.textContent = 'LUKKET';
+                    } else if (isClosedByPlayer && !otherPlayerHasNotClosed) {
+                        row.classList.add('no-score'); // Red when no more score possible
+                        hitsCell.textContent = 'LUKKET';
+                    } else {
+                        row.classList.add('hits'); // Default blue for hits (no special class, just the .hits from before)
                     }
                 });
             });
         }
 
-        function recordHit() {
+        async function recordHit() { // Changed to async to await prompt
             const currentPlayerSelect = document.getElementById('currentPlayer');
-            if (currentPlayerSelect.value === "" || players.length === 0) { // Check if no player is selected or no players exist
+            if (currentPlayerSelect.value === "" || players.length === 0) {
                 document.getElementById('message').textContent = 'Vælg venligst en spiller og/eller tilføj spillere.';
                 return;
             }
@@ -333,7 +448,7 @@
             const messageElement = document.getElementById('message');
             const winnerMessageElement = document.getElementById('winnerMessage');
 
-            if (winnerMessageElement.textContent) {
+            if (gameEnded) { // Use the new gameEnded flag
                 messageElement.textContent = 'Spillet er slut. Nulstil for at spille igen.';
                 return;
             }
@@ -347,10 +462,12 @@
             }
 
             let pointsScored = 0;
-            let otherPlayerHasNotClosed = false;
+            let actualHitCount = 0; // To store how many hits were actually applied to the field
+            let originalScoreBeforeHit = currentPlayer.score; // Store score before potential points
 
-            // Check if current player has closed the number and ANY other player has NOT
-            if (currentPlayer.hits[targetNumber] >= 3) {
+            let otherPlayerHasNotClosed = false;
+            // Check if player has closed this field AND if *any* other player has NOT closed this field
+            if (currentPlayer.hits[targetNumber] >= 3 && players.length > 1) {
                 for (let i = 0; i < players.length; i++) {
                     if (i !== currentPlayerIndex && players[i].hits[targetNumber] < 3) {
                         otherPlayerHasNotClosed = true;
@@ -358,61 +475,169 @@
                     }
                 }
             }
+            
+            // --- DOUBLE AND TRIPLE FIELD SCORING LOGIC ---
+            if ((targetNumber === 'Triple' || targetNumber === 'Double') && currentPlayer.hits[targetNumber] >= 3 && otherPlayerHasNotClosed) {
+                let promptText = `Du har lukket '${targetNumber}' feltet. Indtast et tal mellem 1-20 for at score point:`;
+                let promptedNumber = prompt(promptText);
+                let parsedNumber = parseInt(promptedNumber);
 
-            if (currentPlayer.hits[targetNumber] >= 3 && otherPlayerHasNotClosed) {
-                // Calculate points
-                if (targetNumber >= 15 && targetNumber <= 20) {
+                if (isNaN(parsedNumber) || parsedNumber < 1 || parsedNumber > 20) {
+                    messageElement.textContent = `Ugyldigt tal. Point blev ikke tildelt for ${targetNumber}-feltet.`;
+                    lastAction = null; // Clear last action as this was not a valid hit
+                    updateScoreboard();
+                    return;
+                }
+
+                if (targetNumber === 'Triple') {
+                    pointsScored = parsedNumber * 3; // Triple the value
+                } else if (targetNumber === 'Double') {
+                    pointsScored = parsedNumber * 2; // Double the value
+                }
+                
+                currentPlayer.score += pointsScored;
+                messageElement.textContent = `${currentPlayer.name} scorede ${pointsScored} point på ${targetNumber}-feltet med ${parsedNumber}!`;
+                actualHitCount = 0; // No change to hits for Triple/Double field when scoring points
+            } else if (currentPlayer.hits[targetNumber] >= 3 && otherPlayerHasNotClosed) {
+                // Calculate points for other closed fields (15-20, Bull)
+                if (targetNumber >= 15 && targetNumber === '20') { 
                     pointsScored = parseInt(targetNumber) * hitMultiplier;
                 } else if (targetNumber === 'Bull') {
                     pointsScored = 25;
-                } else if (targetNumber === 'Double') {
-                    pointsScored = 25;
-                } else if (targetNumber === 'Triple') {
-                    pointsScored = 50;
+                } else if (targetNumber >= 15 && targetNumber <= 19) { 
+                    pointsScored = parseInt(targetNumber) * hitMultiplier;
                 }
                 currentPlayer.score += pointsScored;
                 messageElement.textContent = `${currentPlayer.name} scorede ${pointsScored} point på ${targetNumber}!`;
+                actualHitCount = 0; // No change to hits for these fields either, just points
             } else {
                 // Normal hit tracking if not scoring points
                 currentPlayer.hits[targetNumber] += hitMultiplier;
+                actualHitCount = hitMultiplier; // Store how many hits were added
                 messageElement.textContent = ''; // Clear any previous messages
             }
+
+            // Store the action for undo
+            lastAction = {
+                playerIndex: currentPlayerIndex,
+                field: targetNumber,
+                hitsAdded: actualHitCount, // How many hits were actually added
+                pointsAdded: currentPlayer.score - originalScoreBeforeHit // How many points were added
+            };
 
             updateScoreboard();
             checkWinner();
         }
 
+        function undoLastHit() {
+            const messageElement = document.getElementById('message');
+            const winnerMessageElement = document.getElementById('winnerMessage');
+
+            if (gameEnded) { // If game is already ended, cannot undo
+                 messageElement.textContent = 'Spillet er slut. Nulstil for at spille igen.';
+                 return;
+            }
+
+            if (!lastAction) {
+                messageElement.textContent = 'Intet at fortryde.';
+                return;
+            }
+
+            const playerToUndo = players[lastAction.playerIndex];
+
+            // Revert hits
+            if (lastAction.hitsAdded > 0) {
+                playerToUndo.hits[lastAction.field] -= lastAction.hitsAdded;
+            }
+
+            // Revert points
+            if (lastAction.pointsAdded > 0) {
+                playerToUndo.score -= lastAction.pointsAdded;
+            }
+
+            lastAction = null; // Clear the last action after undoing
+            messageElement.textContent = 'Sidste kast er fortrudt.';
+            updateScoreboard();
+            // Important: After undo, re-check winner state, as it might have undone a winning move
+            // We do not set winnerMessageElement.textContent to empty here,
+            // checkWinner() will handle it if the conditions are no longer met.
+            checkWinner(); // Re-evaluate winner status
+            if (!gameEnded) { // Only re-enable controls if game is not ended again
+                document.getElementById('currentPlayer').disabled = false;
+                document.getElementById('targetNumber').disabled = false;
+                document.getElementById('hitMultiplier').disabled = false;
+            }
+        }
+
         function checkWinner() {
             const winnerMessageElement = document.getElementById('winnerMessage');
-            let winnerFound = false;
-            let winningPlayerName = '';
+            let potentialWinner = null;
+            let highestScore = -1; // Initialize with a value lower than any possible score
+            let tiedForHighestScore = false;
 
             if (players.length === 0) return; // No players, no winner
 
-            for (const player of players) {
-                let allFieldsClosed = true;
-                for (const field of fields) {
-                    if (player.hits[field] < 3) {
-                        allFieldsClosed = false;
-                        break;
-                    }
-                }
+            // Find players who have closed all fields
+            const playersWithAllFieldsClosed = players.filter(player => {
+                return fields.every(field => player.hits[field] >= 3);
+            });
 
-                if (allFieldsClosed) {
-                    winningPlayerName = player.name;
-                    winnerFound = true;
-                    break; // Found a winner, no need to check other players
-                }
+            if (playersWithAllFieldsClosed.length === 0) {
+                winnerMessageElement.textContent = ''; // Clear winner message if no one has closed all fields yet
+                gameEnded = false; // Ensure game is not marked as ended
+                return; // No one has closed all fields yet
             }
 
-            if (winnerFound) {
-                winnerMessageElement.textContent = `${winningPlayerName} har lukket alle felter og vinder! Tillykke!`;
-                // Disable further input
-                document.getElementById('currentPlayer').disabled = true;
-                document.getElementById('targetNumber').disabled = true;
-                document.getElementById('hitMultiplier').disabled = true;
+            // If only one player has closed all fields, check if they have the highest score
+            if (playersWithAllFieldsClosed.length === 1) {
+                potentialWinner = playersWithAllFieldsClosed[0];
+                
+                // Find the highest score among ALL players
+                highestScore = Math.max(...players.map(p => p.score));
+
+                if (potentialWinner.score >= highestScore) { // If potential winner has highest score (or tied)
+                    winnerMessageElement.textContent = `${potentialWinner.name} har lukket alle felter og har flest point! Tillykke!`;
+                    gameEnded = true; // Game officially ends
+                    // Disable further input
+                    document.getElementById('currentPlayer').disabled = true;
+                    document.getElementById('targetNumber').disabled = true;
+                    document.getElementById('hitMultiplier').disabled = true;
+
+                    // Save game to history
+                    saveGameToHistory(potentialWinner);
+                } else {
+                    winnerMessageElement.textContent = `${potentialWinner.name} har lukket alle felter, men har ikke flest point endnu. Spillet fortsætter!`;
+                    gameEnded = false; // Game continues
+                }
+            } else { // More than one player has closed all fields
+                // Find the player among those who closed all fields, who also has the highest score
+                playersWithAllFieldsClosed.forEach(player => {
+                    if (player.score > highestScore) {
+                        highestScore = player.score;
+                        potentialWinner = player;
+                        tiedForHighestScore = false;
+                    } else if (player.score === highestScore) {
+                        tiedForHighestScore = true;
+                    }
+                });
+
+                if (tiedForHighestScore) {
+                    winnerMessageElement.textContent = `Flere spillere har lukket alle felter og har samme højeste score. Spillet fortsætter, indtil én har højeste score!`;
+                    gameEnded = false;
+                } else {
+                    winnerMessageElement.textContent = `${potentialWinner.name} har lukket alle felter og har flest point! Tillykke!`;
+                    gameEnded = true; // Game officially ends
+                    // Disable further input
+                    document.getElementById('currentPlayer').disabled = true;
+                    document.getElementById('targetNumber').disabled = true;
+                    document.getElementById('hitMultiplier').disabled = true;
+
+                    // Save game to history
+                    saveGameToHistory(potentialWinner);
+                }
             }
         }
+
 
         function resetGame() {
             // Keep existing players, but reset their scores and hits
@@ -422,6 +647,8 @@
                 });
                 player.score = 0;
             });
+            lastAction = null; // Clear undo history
+            gameEnded = false; // Reset game ended flag
             updateScoreboard();
             document.getElementById('message').textContent = '';
             document.getElementById('winnerMessage').textContent = '';
@@ -430,7 +657,75 @@
             document.getElementById('hitMultiplier').disabled = false;
         }
 
-        // Initialize the game when the page loads
+        // --- Game History Functions ---
+        function saveGameToHistory(winner) {
+            const now = new Date();
+            const formattedDate = now.toLocaleDateString('da-DK', {
+                year: 'numeric',
+                month: 'long',
+                day: 'numeric',
+                hour: '2-digit',
+                minute: '2-digit'
+            });
+
+            const gameRecord = {
+                timestamp: formattedDate,
+                winner: winner.name,
+                players: players.map(p => ({ name: p.name, finalScore: p.score }))
+            };
+
+            gameHistory.push(gameRecord);
+            localStorage.setItem(GAME_HISTORY_KEY, JSON.stringify(gameHistory));
+            displayGameHistory(); // Update the displayed history
+        }
+
+        function loadGameHistory() {
+            const storedHistory = localStorage.getItem(GAME_HISTORY_KEY);
+            if (storedHistory) {
+                gameHistory = JSON.parse(storedHistory);
+            } else {
+                gameHistory = [];
+            }
+            displayGameHistory();
+        }
+
+        function displayGameHistory() {
+            const historyListDiv = document.getElementById('gameHistoryList');
+            historyListDiv.innerHTML = ''; // Clear previous history
+
+            if (gameHistory.length === 0) {
+                historyListDiv.innerHTML = '<p>Ingen tidligere spil gemt.</p>';
+                return;
+            }
+
+            // Display in reverse order (newest first)
+            gameHistory.slice().reverse().forEach((game, index) => {
+                const gameItem = document.createElement('div');
+                gameItem.className = 'game-history-item';
+                
+                gameItem.innerHTML = `
+                    <p><strong>Spil ${gameHistory.length - index}</strong></p>
+                    <p>Dato: ${game.timestamp}</p>
+                    <p>Vinder: <strong>${game.winner}</strong></p>
+                    <p>Deltagere:</p>
+                    <ul>
+                        ${game.players.map(p => `<li>${p.name}: ${p.finalScore} point</li>`).join('')}
+                    </ul>
+                `;
+                historyListDiv.appendChild(gameItem);
+            });
+        }
+
+        function clearGameHistory() {
+            if (confirm('Er du sikker på, at du vil rydde al spilhistorik? Denne handling kan ikke fortrydes.')) {
+                localStorage.removeItem(GAME_HISTORY_KEY);
+                gameHistory = [];
+                displayGameHistory();
+                document.getElementById('message').textContent = 'Spilhistorik er ryddet.';
+            }
+        }
+
+        // Initialize the game and load history when the page loads
         document.addEventListener('DOMContentLoaded', initializeGame);
     </script>
 </body>
