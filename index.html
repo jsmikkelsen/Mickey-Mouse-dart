@@ -21,7 +21,7 @@
             box-shadow: 0 4px 10px rgba(0, 0, 0, 0.1);
             padding: 30px;
             text-align: center;
-            max-width: 900px;
+            max-width: 1200px; /* Increased max-width to accommodate more players */
             width: 100%;
         }
         h1 {
@@ -30,22 +30,30 @@
         }
         .players-container {
             display: flex;
-            justify-content: space-around;
+            justify-content: center;
             gap: 20px;
             margin-bottom: 30px;
-            flex-wrap: wrap;
+            flex-wrap: wrap; /* Allows players to wrap to next line */
         }
         .player-score {
-            flex: 1;
+            flex: 1 1 auto; /* Allow items to grow and shrink */
             min-width: 280px;
+            max-width: 350px; /* Limit max-width for better display of many players */
             border: 1px solid #ddd;
             border-radius: 6px;
             padding: 15px;
             background-color: #f9f9f9;
+            margin-bottom: 15px; /* Spacing between player scorecards when wrapped */
         }
         .player-score h2 {
             color: #555;
             margin-top: 0;
+            margin-bottom: 15px;
+        }
+        .player-score .current-score {
+            font-size: 1.8rem;
+            font-weight: bold;
+            color: #007bff;
             margin-bottom: 15px;
         }
         table {
@@ -80,7 +88,7 @@
             color: #333;
             margin-bottom: 15px;
         }
-        .input-group {
+        .player-management, .input-group {
             display: flex;
             justify-content: center;
             align-items: center;
@@ -88,6 +96,34 @@
             flex-wrap: wrap;
             margin-bottom: 20px;
         }
+        .player-management input[type="text"] {
+            padding: 8px 10px;
+            border: 1px solid #ccc;
+            border-radius: 4px;
+            font-size: 1rem;
+            flex-grow: 1; /* Allow input to grow */
+            max-width: 200px;
+        }
+        .player-management button, .input-group button, .reset-button {
+            background-color: #007bff;
+            color: white;
+            border: none;
+            padding: 10px 20px;
+            border-radius: 5px;
+            cursor: pointer;
+            font-size: 1rem;
+            transition: background-color 0.3s ease;
+        }
+        .player-management button:hover, .reset-button:hover {
+            background-color: #0056b3;
+        }
+        .input-group button {
+            background-color: #28a745;
+        }
+        .input-group button:hover {
+            background-color: #218838;
+        }
+
         .input-group label {
             font-weight: bold;
             color: #666;
@@ -97,19 +133,6 @@
             border: 1px solid #ccc;
             border-radius: 4px;
             font-size: 1rem;
-        }
-        .input-group button {
-            background-color: #28a745;
-            color: white;
-            border: none;
-            padding: 10px 20px;
-            border-radius: 5px;
-            cursor: pointer;
-            font-size: 1rem;
-            transition: background-color 0.3s ease;
-        }
-        .input-group button:hover {
-            background-color: #218838;
         }
         .message {
             margin-top: 20px;
@@ -122,52 +145,20 @@
             font-size: 1.5rem;
             margin-top: 20px;
         }
-        .reset-button {
-            background-color: #007bff;
-            color: white;
-            border: none;
-            padding: 10px 20px;
-            border-radius: 5px;
-            cursor: pointer;
-            font-size: 1rem;
-            margin-top: 20px;
-            transition: background-color 0.3s ease;
-        }
-        .reset-button:hover {
-            background-color: #0056b3;
-        }
     </style>
 </head>
 <body>
     <div class="scoreboard-container">
         <h1>Mickey Mouse Dart Scoreboard</h1>
 
-        <div class="players-container">
-            <div class="player-score" id="player1-score">
-                <h2>Spiller 1</h2>
-                <table>
-                    <thead>
-                        <tr>
-                            <th>Felt</th>
-                            <th>Træffere</th>
-                        </tr>
-                    </thead>
-                    <tbody id="player1-body"></tbody>
-                </table>
-            </div>
+        <div class="player-management">
+            <label for="newPlayerName">Tilføj Spiller:</label>
+            <input type="text" id="newPlayerName" placeholder="Indtast spillernavn">
+            <button onclick="addPlayer()">Tilføj Spiller</button>
+        </div>
 
-            <div class="player-score" id="player2-score">
-                <h2>Spiller 2</h2>
-                <table>
-                    <thead>
-                        <tr>
-                            <th>Felt</th>
-                            <th>Træffere</th>
-                        </tr>
-                    </thead>
-                    <tbody id="player2-body"></tbody>
-                </table>
-            </div>
+        <div class="players-container" id="players-container">
+            <p>Tilføj spillere for at starte spillet.</p>
         </div>
 
         <div class="controls">
@@ -175,9 +166,7 @@
             <div class="input-group">
                 <label for="currentPlayer">Nuværende Spiller:</label>
                 <select id="currentPlayer">
-                    <option value="0">Spiller 1</option>
-                    <option value="1">Spiller 2</option>
-                </select>
+                    </select>
 
                 <label for="targetNumber">Felt:</label>
                 <select id="targetNumber">
@@ -209,19 +198,20 @@
 
     <script>
         const fields = ['15', '16', '17', '18', '19', '20', 'Bull', 'Double', 'Triple'];
-        const players = [
-            { name: 'Spiller 1', hits: {} },
-            { name: 'Spiller 2', hits: {} }
-        ];
+        const players = []; // This will now be dynamically populated and starts empty
 
         // Initialize hits for each player and field
         function initializeGame() {
-            fields.forEach(field => {
-                players.forEach(player => {
+            // No default players added here. User must add them.
+            // Reset existing players if any
+            players.forEach(player => {
+                fields.forEach(field => {
                     player.hits[field] = 0;
                 });
+                player.score = 0;
             });
             updateScoreboard();
+            populatePlayerDropdown(); // Ensure dropdown is updated even if empty
             document.getElementById('message').textContent = '';
             document.getElementById('winnerMessage').textContent = '';
             document.getElementById('currentPlayer').disabled = false;
@@ -229,11 +219,90 @@
             document.getElementById('hitMultiplier').disabled = false;
         }
 
-        function updateScoreboard() {
-            players.forEach((player, playerIndex) => {
-                const tbody = document.getElementById(`player${playerIndex + 1}-body`);
-                tbody.innerHTML = ''; // Clear existing rows
+        function addPlayer() {
+            const newPlayerNameInput = document.getElementById('newPlayerName');
+            let name = newPlayerNameInput.value.trim();
 
+            if (!name) {
+                alert('Indtast venligst et spillernavn.');
+                return;
+            }
+            if (players.some(p => p.name.toLowerCase() === name.toLowerCase())) {
+                alert('En spiller med dette navn eksisterer allerede. Vælg venligst et unikt navn.');
+                return;
+            }
+
+            const newPlayer = { name: name, hits: {}, score: 0 };
+            fields.forEach(field => {
+                newPlayer.hits[field] = 0;
+            });
+            players.push(newPlayer);
+            newPlayerNameInput.value = ''; // Clear input field
+
+            updateScoreboard();
+            populatePlayerDropdown();
+        }
+
+        function populatePlayerDropdown() {
+            const currentPlayerSelect = document.getElementById('currentPlayer');
+            currentPlayerSelect.innerHTML = ''; // Clear existing options
+
+            if (players.length === 0) {
+                const defaultOption = document.createElement('option');
+                defaultOption.value = "";
+                defaultOption.textContent = "Vælg spiller";
+                defaultOption.disabled = true;
+                defaultOption.selected = true;
+                currentPlayerSelect.appendChild(defaultOption);
+            }
+
+            players.forEach((player, index) => {
+                const option = document.createElement('option');
+                option.value = index;
+                option.textContent = player.name;
+                currentPlayerSelect.appendChild(option);
+            });
+        }
+
+        function updateScoreboard() {
+            const playersContainer = document.getElementById('players-container');
+            playersContainer.innerHTML = ''; // Clear existing player cards
+
+            if (players.length === 0) {
+                playersContainer.innerHTML = '<p>Tilføj spillere for at starte spillet.</p>';
+                // Disable controls if no players
+                document.getElementById('currentPlayer').disabled = true;
+                document.getElementById('targetNumber').disabled = true;
+                document.getElementById('hitMultiplier').disabled = true;
+                return;
+            } else {
+                 // Enable controls if players exist
+                document.getElementById('currentPlayer').disabled = false;
+                document.getElementById('targetNumber').disabled = false;
+                document.getElementById('hitMultiplier').disabled = false;
+            }
+
+            players.forEach((player, playerIndex) => {
+                const playerDiv = document.createElement('div');
+                playerDiv.className = 'player-score';
+                playerDiv.id = `player${playerIndex}-score`;
+
+                playerDiv.innerHTML = `
+                    <h2>${player.name}</h2>
+                    <div class="current-score">Points: <span id="player${playerIndex}-total-score">${player.score}</span></div>
+                    <table>
+                        <thead>
+                            <tr>
+                                <th>Felt</th>
+                                <th>Træffere</th>
+                            </tr>
+                        </thead>
+                        <tbody id="player${playerIndex}-body"></tbody>
+                    </table>
+                `;
+                playersContainer.appendChild(playerDiv);
+
+                const tbody = document.getElementById(`player${playerIndex}-body`);
                 fields.forEach(field => {
                     const row = tbody.insertRow();
                     const fieldCell = row.insertCell();
@@ -252,7 +321,13 @@
         }
 
         function recordHit() {
-            const currentPlayerIndex = parseInt(document.getElementById('currentPlayer').value);
+            const currentPlayerSelect = document.getElementById('currentPlayer');
+            if (currentPlayerSelect.value === "" || players.length === 0) { // Check if no player is selected or no players exist
+                document.getElementById('message').textContent = 'Vælg venligst en spiller og/eller tilføj spillere.';
+                return;
+            }
+
+            const currentPlayerIndex = parseInt(currentPlayerSelect.value);
             const targetNumber = document.getElementById('targetNumber').value;
             const hitMultiplier = parseInt(document.getElementById('hitMultiplier').value);
             const messageElement = document.getElementById('message');
@@ -269,51 +344,38 @@
             if ((targetNumber === 'Bull' || targetNumber === 'Double' || targetNumber === 'Triple') && hitMultiplier > 1) {
                 messageElement.textContent = `Kan ikke vælge Dobbelt/Triple for feltet '${targetNumber}'. Kun 'Enkelt' er tilladt her.`;
                 return;
-            } else if (targetNumber === 'Double' && hitMultiplier === 2) {
-                // When 'Double' is selected as target, a 'Double' hit is considered 3 for Mickey Mouse rules
-                // This means hitting the double ring of a number closes it.
-                // However, the rule is about the "Double" section of the board, not a specific number's double.
-                // Let's stick to the interpretation that hitting the "Double" section counts as 1 hit, and the multiplier is for numbers.
-                // Re-reading: "hit a double or triple 3 times in each field." This refers to the actual double/triple *regions* on the board, not a modifier for a number.
-                // The rules state "A field can be closed by hitting it three times, or by hitting a double or triple."
-                // This implies that hitting a specific number (15-20) as a triple closes it immediately.
-                // And there are specific "Double" and "Triple" fields to be hit three times.
-                // So, if target is 'Double' and multiplier is '2', it means you hit the double section of a number, which adds 2 to that number.
-                // But there is also a 'Double' field that needs to be hit 3 times.
+            }
 
-                // Let's clarify the logic based on the user's provided rules:
-                // "Players must hit 15-20, as well as bull, double, and triple 3 times in each field."
-                // "A field can be closed by hitting it three times, or by hitting a double or triple."
-                // This means:
-                // 1. To close 15-20: Hit 15 three times (single, double, or triple). A triple on 15 counts as 3 hits. A double on 15 counts as 2 hits.
-                // 2. To close Bull: Hit Bull three times. (Only single bull is typically recognized as a target here, double bull is considered a different target usually).
-                // 3. To close Double: Hit *any* double ring three times.
-                // 4. To close Triple: Hit *any* triple ring three times.
+            let pointsScored = 0;
+            let otherPlayerHasNotClosed = false;
 
-                // My current input allows selecting a number (15-20), Bull, Double, or Triple as 'targetNumber'.
-                // And then 'hitMultiplier' as 'Enkelt', 'Dobbelt', 'Triple'.
+            // Check if current player has closed the number and ANY other player has NOT
+            if (currentPlayer.hits[targetNumber] >= 3) {
+                for (let i = 0; i < players.length; i++) {
+                    if (i !== currentPlayerIndex && players[i].hits[targetNumber] < 3) {
+                        otherPlayerHasNotClosed = true;
+                        break;
+                    }
+                }
+            }
 
-                // If targetNumber is 15-20:
-                //   If hitMultiplier is 'Enkelt' (1): add 1 to hits for that number.
-                //   If hitMultiplier is 'Dobbelt' (2): add 2 to hits for that number.
-                //   If hitMultiplier is 'Triple' (3): add 3 to hits for that number. (This effectively closes it).
-
-                // If targetNumber is 'Bull':
-                //   hitMultiplier should only be 'Enkelt' (1). Add 1 to hits for 'Bull'.
-
-                // If targetNumber is 'Double':
-                //   hitMultiplier should only be 'Enkelt' (1). Add 1 to hits for 'Double'. (Representing hitting *a* double ring).
-
-                // If targetNumber is 'Triple':
-                //   hitMultiplier should only be 'Enkelt' (1). Add 1 to hits for 'Triple'. (Representing hitting *a* triple ring).
-
-                // The previous check: `if ((targetNumber === 'Bull' || targetNumber === 'Double' || targetNumber === 'Triple') && hitMultiplier > 1)`
-                // This is correct as per this interpretation. You cannot hit a "double-double" or "triple-double".
-                // You hit the "Double" field once, or the "Triple" field once.
-
+            if (currentPlayer.hits[targetNumber] >= 3 && otherPlayerHasNotClosed) {
+                // Calculate points
+                if (targetNumber >= 15 && targetNumber <= 20) {
+                    pointsScored = parseInt(targetNumber) * hitMultiplier;
+                } else if (targetNumber === 'Bull') {
+                    pointsScored = 25;
+                } else if (targetNumber === 'Double') {
+                    pointsScored = 25;
+                } else if (targetNumber === 'Triple') {
+                    pointsScored = 50;
+                }
+                currentPlayer.score += pointsScored;
+                messageElement.textContent = `${currentPlayer.name} scorede ${pointsScored} point på ${targetNumber}!`;
             } else {
+                // Normal hit tracking if not scoring points
                 currentPlayer.hits[targetNumber] += hitMultiplier;
-                messageElement.textContent = '';
+                messageElement.textContent = ''; // Clear any previous messages
             }
 
             updateScoreboard();
@@ -323,22 +385,28 @@
         function checkWinner() {
             const winnerMessageElement = document.getElementById('winnerMessage');
             let winnerFound = false;
+            let winningPlayerName = '';
 
-            players.forEach(player => {
+            if (players.length === 0) return; // No players, no winner
+
+            for (const player of players) {
                 let allFieldsClosed = true;
-                fields.forEach(field => {
+                for (const field of fields) {
                     if (player.hits[field] < 3) {
                         allFieldsClosed = false;
+                        break;
                     }
-                });
+                }
 
                 if (allFieldsClosed) {
-                    winnerMessageElement.textContent = `${player.name} har lukket alle felter og vinder! Tillykke!`;
+                    winningPlayerName = player.name;
                     winnerFound = true;
+                    break; // Found a winner, no need to check other players
                 }
-            });
+            }
 
             if (winnerFound) {
+                winnerMessageElement.textContent = `${winningPlayerName} har lukket alle felter og vinder! Tillykke!`;
                 // Disable further input
                 document.getElementById('currentPlayer').disabled = true;
                 document.getElementById('targetNumber').disabled = true;
@@ -347,7 +415,19 @@
         }
 
         function resetGame() {
-            initializeGame();
+            // Keep existing players, but reset their scores and hits
+            players.forEach(player => {
+                fields.forEach(field => {
+                    player.hits[field] = 0;
+                });
+                player.score = 0;
+            });
+            updateScoreboard();
+            document.getElementById('message').textContent = '';
+            document.getElementById('winnerMessage').textContent = '';
+            document.getElementById('currentPlayer').disabled = false;
+            document.getElementById('targetNumber').disabled = false;
+            document.getElementById('hitMultiplier').disabled = false;
         }
 
         // Initialize the game when the page loads
